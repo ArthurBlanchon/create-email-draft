@@ -1,62 +1,30 @@
-# scaffold-latest
+# create-email-draft
 
-Base template to build a Grist widget with `grist-widget-sdk`.
+A Grist custom widget built with `grist-widget-sdk`: compose an email draft
+from the linked Grist row and hand it off to the user's mail client. It reads
+recipients / reply-to / subject / body from mapped columns, lets you pick a
+diffusion list and drop individual recipients, and opens a prefilled
+`mailto:` draft (tracking send status/date back on the row).
 
-`src/main.tsx` wraps the app with `GristWidgetProvider`, `GristBoundary`, and `GristSdkAlerts`. The latter maps `getGristSdkAlertDescriptors()` from the SDK to shadcn `Alert` (`src/components/grist-sdk-alerts.tsx` + `src/components/ui/alert.tsx`); keep them in sync with the playground when you change alert styling.
+`src/App.tsx` reads the selected row via `useGristContext<DraftMappedRecord>()`,
+renders the compose UI, and — when opened via the widget's config action —
+shows a `DiffusionConfigPanel` for editing the diffusion list stored in the
+widget options. It declares and exports `GRIST_OPTIONS` (`full` access, plus
+the mapped columns: recipients / replyToEmail / subject / content /
+removedRecipients / status / statusDate) and `WIDGET_METADATA`.
 
-Opened outside a Grist iframe, `main.tsx` picks between two components purely by URL shape (`src/lib/showcase-routing.ts`, no router needed): a bare path with no recognized channel suffix renders `TemplateLanding` (its own hero, onboarding, and released-version index); `/latest/`, `/dev/`, or `/v<version>/` renders `ChannelNotice` instead — a distinct hero explaining which build this is, chips to jump to any other version/channel (`src/lib/showcase-versions.ts`), and a copy-this-URL helper for pasting into Grist's custom widget field. Both render `ScaffoldFooter` (`src/components/scaffold-footer.tsx`) at the bottom — a small, purely informational note ("Scaffolded from `create-grist-widget@X.Y.Z`") built from `package.json`'s `createGristWidgetVersion` field, which the CLI stamps on every real scaffold (`vite.config.ts` injects it as `__CREATE_GRIST_WIDGET_VERSION__`). Renders nothing if that field is absent, e.g. this pristine template source itself.
-
-When actually embedded, `GristStatusChip` (`src/components/grist-status-chip.tsx`) shows a small pill with live handshake status — connecting, retrying with a countdown, connected, or unavailable — using `useAmbientGristHandshake()` from `grist-widget-sdk/advanced`. It must be mounted *inside* `GristWidgetProvider` (see `src/main.tsx`): it only observes that provider's own handshake manager and never mounts a second one, so it's purely observational and can never duplicate or race the real handshake (see `apps/docs/api/handshake.md`).
-
-`src/App.tsx` uses `useGrist<TaskRow, TaskMapped>()` for the selected row (`w.record`, `w.mode`) and remounts the UI with `key={rowKey}` when the row changes — same pattern as `widgets/create-email-draft`. See `src/grist-types.example.ts` for typing patterns.
+`src/main.tsx` wraps the app with `GristWidgetProvider`, `GristBoundary`, and
+`GristSdkAlerts`. Opened outside a Grist iframe, `main.tsx` renders the
+showcase hub (`TemplateLanding`) at a bare path, or a `ChannelNotice` on
+`/latest/`, `/dev/`, `/v<version>/` (`src/lib/showcase-routing.ts`); when
+embedded, `GristStatusChip` shows live handshake status. `GristSdkAlerts`
+maps `getGristSdkAlertDescriptors()` from the SDK to shadcn `Alert`.
 
 - **ESLint** blocks direct `grist` global usage in `src/` — use the SDK only.
-- Uncomment `GRIST_OPTIONS.columns` in `App.tsx` to enable column mapping; `main.tsx` sets `GristBoundary gate="canRender"` when columns are declared. Mapping alerts use `GristSdkAlerts`.
+- Mapping alerts use `GristSdkAlerts`; the mapped columns are declared in
+  `GRIST_OPTIONS` (in `src/App.tsx`).
 
 To add widget tests later, see [Testing](https://github.com/ArthurBlanchon/grist-widget-sdk/blob/main/apps/docs/guide/testing.md) (`renderWithGrist` from `grist-widget-sdk/emulator/testing`).
-
-**Monorepo dev:** this template resolves `grist-widget-sdk` from `packages/core/dist` (like the other widgets), not from SDK source. After changing the SDK, run `pnpm prebuild` or `pnpm --filter grist-widget-sdk build` before `pnpm dev`.
-
-## How this template is distributed
-
-This is the **source** template. It is consumed two ways:
-
-- **In the SDK monorepo (development):** it's a workspace member and depends on
-  the SDK via `"grist-widget-sdk": "workspace:^"`, resolved from
-  `packages/core/dist`. Run `pnpm --filter grist-widget-sdk build` after
-  changing the SDK, then `pnpm dev` here.
-- **Externally (your own repo):** the `create-grist-widget` CLI
-  (`npm create grist-widget my-widget`) copies this template and rewrites the
-  dependency to the published npm range (`^0.x`), so nothing points back at
-  this repo. See [Getting started](https://grist-widgets.com/guide/getting-started).
-
-`pnpm-workspace.yaml` here only pre-approves esbuild's build script so a
-standalone `pnpm install` (pnpm 11) exits cleanly; inside the monorepo it's
-ignored (the root workspace governs).
-
-### Live preview inside the monorepo (this template's own showcase)
-
-This repo also deploys this template's own **unmodified** source to its own
-GitHub Pages — a live showcase of exactly what `npm create grist-widget`
-scaffolds, at `https://arthurblanchon.github.io/grist-widget-sdk/template/`.
-Same workflow every widget already uses:
-
-- Push template changes to the persistent `dev/template-showcase` branch —
-  every push auto-deploys a live preview at `.../template/dev/` that
-  self-reloads a few seconds later, same as a scaffolded widget's own `dev`
-  channel. Kept around permanently (not deleted after each round), so
-  `.../template/dev/` is always live to preview whatever's currently being
-  iterated on here.
-- Ready to release? **Bump `packages/create-grist-widget/package.json`'s
-  version**, open a PR from your feature branch into `main`, and merge —
-  merging is what actually publishes `.../template/v<version>/` +
-  `.../template/latest/` (and a real `create-grist-widget` npm release,
-  since that package embeds this template verbatim — see
-  `scripts/build-template.mjs`). Merging without a version bump publishes
-  nothing (same idempotent-skip rule as every other deploy pipeline here).
-
-See `scripts/deploy/template-showcase.mjs` + `.github/workflows/
-deploy-template-showcase.yml` (monorepo root) for the pipeline itself.
 
 ## Deployment
 
