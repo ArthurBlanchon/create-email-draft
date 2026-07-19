@@ -1,7 +1,14 @@
 {
-  "name": "grist-widget-template",
+  "name": "create-email-draft",
   "private": true,
-  "version": "0.2.20",
+  "version": "0.0.2",
+  "grist": {
+    "name": "Create Email Draft",
+    "widgetId": "@arthurblanchon/create-email-draft",
+    "published": true,
+    "accessLevel": "full",
+    "renderAfterReady": true
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
