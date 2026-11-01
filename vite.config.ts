@@ -2,7 +2,9 @@ import { readFileSync } from "fs"
 import path from "path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+// vitest/config's defineConfig is vite's plus the `test` field below, so
+// `pnpm test` reuses this file's `@` alias and plugins.
+import { defineConfig } from "vitest/config"
 
 // Read here (Node context) rather than importing package.json into src/ --
 // keeps the whole file out of the bundle, exposing only the one field the
@@ -19,5 +21,8 @@ export default defineConfig({
   },
   define: {
     __CREATE_GRIST_WIDGET_VERSION__: JSON.stringify(pkg.createGristWidgetVersion ?? null),
+  },
+  test: {
+    environment: "jsdom",
   },
 })
