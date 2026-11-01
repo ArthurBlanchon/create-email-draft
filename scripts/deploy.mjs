@@ -23,6 +23,9 @@
 //     Prints JSON { context: "release"|"dev", version?, base, skip }.
 //     Release is skipped when v<version> already exists on gh-pages
 //     (idempotence: re-pushing main without a version bump is a no-op).
+//     A repo's first genuine release always resolves to v0.0.1 regardless of
+//     package.json's version -- so "Use this template" (whose initial push
+//     to main fires this workflow) publishes a clean v0.0.1 straight away.
 //
 //   place    --site <dir> --repo <name> --channel <release|dev>
 //            [--version <v>] --dist <dir> --sha <sha> [--ref <ref>]
@@ -36,10 +39,15 @@
 //     Regenerates versions.json (release runs only) and commits + pushes the
 //     gh-pages tree with a rebase-and-retry loop.
 //
-//   reset-branches [--repo-dir <dir>]
+//   reset-branches [--repo-dir <dir>] [--repo <name>] [--owner-repo <owner/name>]
 //     On a repo's first genuine release only (caller gates on plan()'s
-//     firstRelease): prunes every branch except main/dev/gh-pages and
-//     force-resets dev to main's current tip.
+//     firstRelease): renames the four placeholder-identity spots (only if
+//     --repo is given and they still carry the template's own placeholder
+//     text -- a no-op for a CLI scaffold that already renamed itself), writes
+//     the /latest/ install URL into README.md's install-url block (owner/name
+//     from --owner-repo, else $GITHUB_REPOSITORY; a no-op without it), resets
+//     package.json's version to 0.0.1, prunes every branch except
+//     main/dev/gh-pages, and force-resets dev to main's current tip.
 
 import {
   existsSync,
@@ -111,19 +119,60 @@ export function plan(siteDir, repo, event, ref, { force = false } = {}) {
   // whatever package.json's version field says -- found live: a repo copied
   // via GitHub's "Use this template" inherited "0.2.18" from the source
   // template repo's own main branch (itself a canary-stamped scaffold that
-  // had been promoted there), instead of starting fresh. Once a repo has a
-  // genuine release, this no longer applies -- its own version bumps are
-  // its own responsibility from then on, same as `cleanupForeignVersionsIfFirstRelease`.
+  // had been promoted there), instead of starting fresh. This is what makes
+  // "Use this template" publish a clean v0.0.1 the moment the repo is
+  // created (GitHub's own initial push to main fires this workflow): the
+  // copy's inherited canary version is ignored for that first release. To
+  // keep the *next* release clean too, the workflow's first-release reset
+  // step rewrites package.json's version back to 0.0.1 in the repo itself
+  // (see `resetBranchesIfFirstRelease`), so the second release naturally
+  // bumps from 0.0.1 rather than the inherited canary number. Once a repo
+  // has a genuine release, this override no longer applies -- its own
+  // version bumps are its own responsibility from then on.
   const firstRelease = !hasGenuineRelease(siteDir, repo)
   const version = firstRelease ? "0.0.1" : pkg.version
   if (!version) throw new Error("package.json has no version")
   const versionDir = join(siteDir, `v${version}`)
   const exists = isGenuineRelease(versionDir, repo)
+  const skip = exists && !force
+  // T-07: "merging without bumping the version publishes nothing" was a
+  // silent no-op, documented in two places (this file's own header comment,
+  // and AGENTS.md's Anti-patterns) instead of made unrepresentable. Turn it
+  // loud for the one case that actually means "I meant to publish and
+  // didn't": a genuine `push` to main (not `workflow_dispatch`, which has
+  // its own explicit --force for intentional rebuilds) landed on a repo
+  // that's already released before, and the version it resolved to was
+  // already published. If HEAD's parent had the *same* version, nothing
+  // about this push looks like an intentional re-run -- fail the workflow
+  // step instead of quietly reporting success. Falls back to today's silent
+  // skip if HEAD~1 doesn't resolve (e.g. a squashed/rebased history, or
+  // this being the repo's very first commit) -- this is a backstop for the
+  // common case, not a guarantee for every git topology.
+  if (event === "push" && !firstRelease && skip) {
+    try {
+      const previousPkgJson = execFileSync("git", ["show", "HEAD~1:package.json"], {
+        encoding: "utf8",
+      })
+      const previousVersion = JSON.parse(previousPkgJson).version
+      if (previousVersion === version) {
+        throw new Error(
+          `deploy: this push to main would publish nothing -- v${version} was already released and ` +
+            `package.json's version is unchanged from the previous commit. Bump "version" in package.json ` +
+            `before merging if you meant to publish new content (see AGENTS.md's Anti-patterns).`
+        )
+      }
+    } catch (err) {
+      // Re-throw our own message; swallow only git/JSON failures (HEAD~1
+      // missing, package.json didn't exist at that commit, etc.) and fall
+      // through to the existing silent-skip behavior for those cases.
+      if (err instanceof Error && err.message.startsWith("deploy: this push")) throw err
+    }
+  }
   return {
     context: "release",
     version,
     base: basePathFor(repo, "release", version),
-    skip: exists && !force,
+    skip,
     reason: exists ? (force ? "force-rebuild" : "already-published") : "new-version",
     // Exposed so the workflow can gate a one-time repo cleanup (prune stray
     // branches, reset dev to main) on exactly this signal -- see
@@ -151,6 +200,12 @@ export function selfReloadSnippet(sha) {
       }
     } catch (e) { /* transient offline / 404 during publish: keep polling */ }
   }
+  check(); // don't wait a full POLL_MS for the first check -- a plain
+           // (non-cache-busted) request for this very page can hit a stale
+           // CDN-cached index.html referencing JS assets a newer deploy
+           // already deleted, producing a blank/black screen until this
+           // fires; found live, waiting the full interval left that
+           // black screen up for ~5s on a fresh visit.
   setInterval(check, POLL_MS);
 })();
 </script>`
@@ -206,21 +261,28 @@ function replaceDir(dest, srcDist) {
 
 /**
  * If this repo has never genuinely published a release before (no
- * v<version>/ directory whose showcase-meta.json matches this repo), any
- * v<version>/ directories present are provably inherited noise -- e.g. from
- * copying this template repo including its gh-pages branch (GitHub's "Use
- * this template" -> "Include all branches"). Safe to clear them all before
- * placing this repo's actual first release: there is no ambiguity, since a
- * repo with zero genuine releases can't have any of its own history to lose.
- * Never touches dev/, latest/, or site-root files. Once a genuine release
- * exists for this repo, buildVersionsManifest is non-empty and this is
- * permanently a no-op.
+ * v<version>/ directory whose showcase-meta.json matches this repo), *every*
+ * top-level entry except `dev/` (the mutable dev channel, legitimately this
+ * repo's own regardless of release history) and a small set of
+ * pipeline-managed files is provably inherited noise -- e.g. from copying
+ * this template repo including its gh-pages branch (GitHub's "Use this
+ * template" -> "Include all branches"): stray `v<version>/` directories,
+ * but also a root `index.html`/`latest/` still referencing the *source*
+ * repo's own base path (found live: a fresh copy's root and `latest/`
+ * pointed at `/grist-widget-template/v0.2.22/assets/...`, which 404s on
+ * this repo's own Pages site). Called by `placeTarget` right before it
+ * writes this repo's own first release, so the inherited noise is replaced
+ * rather than layered under. Safe to clear unconditionally: a repo with
+ * zero genuine releases can't have any of its own history to lose. Once a
+ * genuine release exists for this repo, buildVersionsManifest is non-empty
+ * and this is permanently a no-op.
  */
 export function cleanupForeignVersionsIfFirstRelease(siteDir, repo) {
   if (hasGenuineRelease(siteDir, repo)) return { cleaned: [] }
+  const PROTECTED = new Set([".nojekyll", "dev", "versions.json", ".git"])
   const cleaned = []
   for (const name of existsSync(siteDir) ? readdirSync(siteDir) : []) {
-    if (!/^v\d+\.\d+\.\d+/.test(name)) continue
+    if (PROTECTED.has(name)) continue
     rmSync(join(siteDir, name), { recursive: true, force: true })
     cleaned.push(name)
   }
@@ -325,19 +387,178 @@ export function finalize({ siteDir, updateVersions, push, commitMessage, remoteB
 }
 
 /**
- * Establish the schema every widget repo should start from -- `main` and
- * `dev` identical, `gh-pages` managed by CI only -- by pruning every other
- * branch and force-resetting `dev` to `main`'s current tip (the commit
- * already checked out at `repoDir`). Runs once, gated by the caller on
- * `plan()`'s `firstRelease` flag, so it applies equally to a CLI scaffold
- * (already satisfies this trivially -- nothing to prune, dev already equals
- * main) and a repo copied via GitHub's "Use this template" (may have a
- * stray inherited branch, or `dev` tracking the source template's own
- * unrelated preview history). Operates on `repoDir`, the repo's own
- * checkout -- a different directory than the gh-pages `siteDir` every other
- * function here works with.
+ * Derive an npm-safe package name and a human title from a real GitHub repo
+ * name -- which allows characters (uppercase, underscores, periods) npm
+ * package names don't. Mirrors the title-casing
+ * `packages/create-grist-widget/bin/create-grist-widget.mjs` already applies
+ * to its own CLI-provided `rawName`, so a repo named e.g. `Ask-Genial_Widget`
+ * produces the same shape of package name / title a CLI user typing
+ * `ask-genial-widget` would have gotten.
  */
-export function resetBranchesIfFirstRelease(repoDir, keep = ["main", "dev", "gh-pages"]) {
+export function deriveIdentity(repoName) {
+  const packageName =
+    (repoName || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "grist-widget"
+  const title = packageName
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ")
+  return { packageName, title }
+}
+
+// README.md's install-URL block. awesome-grist-widgets only registers a
+// widget whose install URL its own repo states explicitly, so the first
+// release writes it there (docs/planning/2026-11-01-widget-lifecycle-plan.md,
+// R1). A README without these markers is left alone.
+const INSTALL_URL_START = "<!-- install-url:start -->"
+const INSTALL_URL_END = "<!-- install-url:end -->"
+
+/**
+ * The GitHub Pages URL of the `/latest/` channel for `owner/repo`, the same
+ * path plan() builds the release under. A `<owner>.github.io` repo is a
+ * user/org site, served at the domain root. A custom Pages domain isn't
+ * known here: edit the README line if the widget uses one.
+ */
+export function latestPagesUrl(ownerRepo) {
+  const [owner, repo] = String(ownerRepo || "").split("/")
+  if (!owner || !repo) return null
+  const host = `${owner.toLowerCase()}.github.io`
+  const base = repo.toLowerCase() === host ? `https://${host}/` : `https://${host}/${repo}/`
+  return `${base}latest/`
+}
+
+/** README text with its install-URL block set to `url`; unchanged without the markers. */
+export function withInstallUrl(readme, url) {
+  const start = readme.indexOf(INSTALL_URL_START)
+  const end = readme.indexOf(INSTALL_URL_END, start)
+  if (start < 0 || end < 0) return readme
+  const block = [
+    INSTALL_URL_START,
+    `**Install URL**, to paste into a Grist custom widget's URL field: <${url}>`,
+    INSTALL_URL_END,
+  ].join("\n")
+  return readme.slice(0, start) + block + readme.slice(end + INSTALL_URL_END.length)
+}
+
+/**
+ * The same four placeholder-identity edits
+ * `packages/create-grist-widget/bin/create-grist-widget.mjs` applies at
+ * scaffold time, parameterized by a derived identity instead of CLI input.
+ * Each substitution is a plain string replace, so it's naturally a no-op
+ * wherever the placeholder text is already gone -- a CLI-scaffolded repo
+ * (whose name may legitimately differ from its GitHub repo name) is never
+ * touched by this.
+ */
+function identityEdits({ packageName, title }) {
+  return [
+    ["package.json", [["grist-widget-template-vite", packageName]]],
+    ["README.md", [["grist-widget-template-vite", packageName]]],
+    ["index.html", [["<title>Grist Widget</title>", `<title>${title}</title>`]]],
+    ["src/App.tsx", [['title: "Grist Widget Template",', `title: "${title}",`]]],
+  ]
+}
+
+/**
+ * Establish the state every widget repo should start from, on its first
+ * genuine release only (gated by the caller on `plan()`'s `firstRelease`):
+ *
+ *   0. If `repo` is given, rewrite the four placeholder-identity spots (see
+ *      `identityEdits`) to match the real repo name -- the piece "Use this
+ *      template" skips entirely, since it copies the repo verbatim and never
+ *      runs the CLI's own rename step. Folded into the same commit as the
+ *      version reset below, not a separate one.
+ *   1. Reset package.json's version to 0.0.1. The first release already
+ *      published v0.0.1 (forced by plan() regardless of package.json), but a
+ *      repo copied via GitHub's "Use this template" still carries the source
+ *      template's inherited canary version in the file (found live: a copy
+ *      shipped 0.2.23) -- so its *next* release would jump straight to
+ *      v0.2.24 instead of a clean v0.0.2. Rewriting the file to 0.0.1 here,
+ *      committed to main, makes the next bump land on 0.0.2. A CLI scaffold
+ *      already ships 0.0.1, so this is a no-op there.
+ *   2. main == dev, gh-pages CI-managed only: prune every other branch and
+ *      force-reset `dev` to `main`'s current tip (which now carries the
+ *      version-reset commit). A CLI scaffold satisfies this trivially; a
+ *      "Use this template" copy may have a stray inherited branch, or a
+ *      `dev` tracking the source template's own unrelated preview history.
+ *
+ * Operates on `repoDir`, the repo's own checkout -- a different directory
+ * than the gh-pages `siteDir` every other function here works with. The
+ * version-reset commit re-triggers this workflow on main, but that run sees
+ * a genuine release already published (firstRelease=false) and skips both
+ * the release and this reset, so there's no loop.
+ */
+export function resetBranchesIfFirstRelease(
+  repoDir,
+  repo,
+  keep = ["main", "dev", "gh-pages"],
+  ownerRepo = process.env.GITHUB_REPOSITORY,
+) {
+  const changedFiles = new Set()
+  const renamedFiles = []
+
+  if (repo) {
+    for (const [file, subs] of identityEdits(deriveIdentity(repo))) {
+      const p = join(repoDir, file)
+      if (!existsSync(p)) continue
+      const before = readFileSync(p, "utf8")
+      const after = subs.reduce((text, [search, replace]) => text.split(search).join(replace), before)
+      if (after !== before) {
+        writeFileSync(p, after)
+        changedFiles.add(file)
+        renamedFiles.push(file)
+      }
+    }
+  }
+  const identityReset = renamedFiles.length > 0
+
+  // The install URL, for registries and for whoever reads the README.
+  let installUrl = null
+  const readmePath = join(repoDir, "README.md")
+  const url = latestPagesUrl(ownerRepo)
+  if (url && existsSync(readmePath)) {
+    const before = readFileSync(readmePath, "utf8")
+    const after = withInstallUrl(before, url)
+    if (after !== before) {
+      writeFileSync(readmePath, after)
+      changedFiles.add("README.md")
+      installUrl = url
+    }
+  }
+
+  let versionReset = false
+  const pkgPath = join(repoDir, "package.json")
+  if (existsSync(pkgPath)) {
+    // Re-read after any identity edit above, so a rewritten `name` survives
+    // this JSON round-trip instead of being clobbered by it.
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"))
+    if (pkg.version !== "0.0.1") {
+      pkg.version = "0.0.1"
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n")
+      changedFiles.add("package.json")
+      versionReset = true
+    }
+  }
+
+  if (changedFiles.size > 0) {
+    const parts = []
+    if (identityReset) parts.push("personalize scaffold")
+    if (installUrl) parts.push("write install URL")
+    if (versionReset) parts.push("reset version to 0.0.1")
+    git(["add", ...changedFiles], repoDir)
+    git(
+      [
+        "-c", "user.name=github-actions[bot]",
+        "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+        "commit", "-m", `chore: ${parts.join(" + ")} for a clean first release`,
+      ],
+      repoDir,
+    )
+    git(["push", "origin", "HEAD:refs/heads/main"], repoDir)
+  }
+
   const raw = git(["ls-remote", "--heads", "origin"], repoDir)
   const branches = raw
     ? raw.split("\n").map((line) => line.split("refs/heads/")[1]).filter(Boolean)
@@ -349,7 +570,7 @@ export function resetBranchesIfFirstRelease(repoDir, keep = ["main", "dev", "gh-
     deletedBranches.push(b)
   }
   git(["push", "--force", "origin", "HEAD:refs/heads/dev"], repoDir)
-  return { deletedBranches, devReset: true }
+  return { deletedBranches, devReset: true, versionReset, identityReset, renamedFiles, installUrl }
 }
 
 // ----------------------------------------------------------------------------
@@ -376,7 +597,9 @@ function main() {
 
   switch (cmd) {
     case "plan": {
-      const result = plan(args.site, args.repo, args.event, args.ref, { force: !!args.force })
+      const result = plan(args.site, args.repo, args.event, args.ref, {
+        force: !!args.force,
+      })
       process.stdout.write(JSON.stringify(result))
       break
     }
@@ -410,7 +633,12 @@ function main() {
       break
     }
     case "reset-branches": {
-      const res = resetBranchesIfFirstRelease(args["repo-dir"] || ".")
+      const res = resetBranchesIfFirstRelease(
+        args["repo-dir"] || ".",
+        args.repo,
+        undefined,
+        args["owner-repo"] || process.env.GITHUB_REPOSITORY,
+      )
       console.log("reset-branches:", JSON.stringify(res))
       break
     }
