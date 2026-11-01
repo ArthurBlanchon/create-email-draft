@@ -4,7 +4,6 @@ import { GristBoundary, GristWidgetProvider } from "grist-widget-sdk"
 
 import { ChannelNotice } from "@/components/channel-notice"
 import { GristSdkAlerts } from "@/components/grist-sdk-alerts"
-import { GristStatusChip } from "@/components/grist-status-chip"
 import { TemplateLanding } from "@/components/template-landing"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { parseShowcasePath } from "@/lib/showcase-routing"
@@ -36,7 +35,6 @@ createRoot(document.getElementById("root")!).render(
         </div>
       ) : isEmbedded ? (
         <GristWidgetProvider options={GRIST_OPTIONS}>
-          <GristStatusChip />
           <GristBoundary
             gate={GRIST_OPTIONS.columns?.length ? "canRender" : "ready"}
           >
