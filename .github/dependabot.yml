@@ -32,6 +32,12 @@ updates:
       vite:
         patterns: ["vite", "@vitejs/*"]
         update-types: ["major"]
+    ignore:
+      # TypeScript 7 (the native port) drops the JavaScript compiler API that
+      # typescript-eslint is built on: `pnpm lint` fails with "typescript-eslint
+      # does not support TS 7.0". Remove this once typescript-eslint supports it.
+      - dependency-name: "typescript"
+        versions: [">=7"]
 
   - package-ecosystem: "github-actions"
     # "/" covers .github/workflows/.
