@@ -6,6 +6,10 @@ recipients / reply-to / subject / body from mapped columns, lets you pick a
 diffusion list and drop individual recipients, and opens a prefilled
 `mailto:` draft (tracking send status/date back on the row).
 
+<!-- install-url:start -->
+**Install URL**, to paste into a Grist custom widget's URL field: <https://arthurblanchon.github.io/create-email-draft/latest/>
+<!-- install-url:end -->
+
 `src/App.tsx` reads the selected row via `useGristContext<DraftMappedRecord>()`,
 renders the compose UI, and — when opened via the widget's config action —
 shows a `DiffusionConfigPanel` for editing the diffusion list stored in the
