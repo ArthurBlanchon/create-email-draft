@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import {
   useGristContext,
@@ -218,14 +218,26 @@ function DiffusionConfigPanel({
   onClose: () => void
 }) {
   const [tables, setTables] = useState<string[]>([])
-  const [columns, setColumns] = useState<GristColumnInfo[]>([])
+  const [fetchedColumns, setFetchedColumns] = useState<{
+    table: string
+    columns: GristColumnInfo[]
+  } | null>(null)
   const [selectedTable, setSelectedTable] = useState("")
   const [selectedNameCol, setSelectedNameCol] = useState("")
   const [selectedEmailsCol, setSelectedEmailsCol] = useState("")
-  const [columnsLoading, setColumnsLoading] = useState(false)
+  // The selected table's columns once fetched: none while no table is
+  // selected, or while that table's fetch is in flight.
+  const columns =
+    selectedTable && fetchedColumns?.table === selectedTable
+      ? fetchedColumns.columns
+      : []
+  const columnsLoading =
+    Boolean(selectedTable) && fetchedColumns?.table !== selectedTable
 
   const wRef = useRef(w)
-  wRef.current = w
+  useLayoutEffect(() => {
+    wRef.current = w
+  })
 
   useEffect(() => {
     const config = parseDiffusionConfig(wRef.current.widgetOptions)
@@ -242,16 +254,20 @@ function DiffusionConfigPanel({
   }, [])
 
   useEffect(() => {
-    if (!selectedTable) {
-      setColumns([])
-      return
-    }
-    setColumnsLoading(true)
+    if (!selectedTable) return
+    // A response for a table that is no longer selected is dropped.
+    let current = true
     void wRef.current
       .listColumns(selectedTable)
-      .then(setColumns)
-      .catch(() => setColumns([]))
-      .finally(() => setColumnsLoading(false))
+      .then((cols) => {
+        if (current) setFetchedColumns({ table: selectedTable, columns: cols })
+      })
+      .catch(() => {
+        if (current) setFetchedColumns({ table: selectedTable, columns: [] })
+      })
+    return () => {
+      current = false
+    }
   }, [selectedTable])
 
   const handleSave = async () => {
@@ -421,28 +437,37 @@ function CreateDraftEmailForm({
     return () => window.clearTimeout(timeout)
   }, [toastMessage, toastType])
 
-  const [diffusionEntries, setDiffusionEntries] = useState<DiffusionEntry[]>(
-    []
-  )
-  const [diffusionLoading, setDiffusionLoading] = useState(false)
+  const [fetchedDiffusion, setFetchedDiffusion] = useState<{
+    key: string
+    entries: DiffusionEntry[]
+  } | null>(null)
   const [showDiffusionPicker, setShowDiffusionPicker] = useState(false)
   const [diffusionPickerIndex, setDiffusionPickerIndex] = useState(0)
   const bccInputRef = useRef<HTMLInputElement>(null)
   const formWRef = useRef(w)
-  formWRef.current = w
+  useLayoutEffect(() => {
+    formWRef.current = w
+  })
 
   const diffusionConfigKey = diffusionConfig
     ? `${diffusionConfig.diffusionTableId}:${diffusionConfig.diffusionNameColumn}:${diffusionConfig.diffusionEmailsColumn}`
     : ""
+  // The configured diffusion lists once fetched: none until a diffusion table
+  // is configured and Grist is ready, or while its fetch is in flight.
+  const diffusionKey = w.isReady ? diffusionConfigKey : ""
+  const diffusionEntries =
+    diffusionKey && fetchedDiffusion?.key === diffusionKey
+      ? fetchedDiffusion.entries
+      : []
+  const diffusionLoading =
+    Boolean(diffusionKey) && fetchedDiffusion?.key !== diffusionKey
 
   useEffect(() => {
-    if (!diffusionConfig || !w.isReady) {
-      setDiffusionEntries([])
-      return
-    }
+    if (!diffusionKey || !diffusionConfig) return
     const { diffusionTableId, diffusionNameColumn, diffusionEmailsColumn } =
       diffusionConfig
-    setDiffusionLoading(true)
+    // A response for a configuration that has since changed is dropped.
+    let current = true
     void formWRef.current
       .fetchTableRows(diffusionTableId)
       .then((rows) => {
@@ -459,12 +484,16 @@ function CreateDraftEmailForm({
             ).filter((e) => EMAIL_RE.test(e)),
           }))
           .filter((e) => e.name && e.emails.length > 0)
-        setDiffusionEntries(entries)
+        if (current) setFetchedDiffusion({ key: diffusionKey, entries })
       })
-      .catch(() => setDiffusionEntries([]))
-      .finally(() => setDiffusionLoading(false))
+      .catch(() => {
+        if (current) setFetchedDiffusion({ key: diffusionKey, entries: [] })
+      })
+    return () => {
+      current = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diffusionConfigKey, w.isReady])
+  }, [diffusionKey])
 
   const diffusionFilter = useMemo(() => {
     const slashIdx = recipientInput.lastIndexOf("/")
