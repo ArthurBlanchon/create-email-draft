@@ -21,12 +21,16 @@ name: Deploy widget to GitHub Pages
 #   - push to dev                    -> dev channel: mutable /<repo>/dev/
 #     with version.json + a self-reload snippet, for live review inside Grist.
 #
-# All logic lives in scripts/deploy.mjs (node builtins only).
+# All logic lives in the `grist-widget-deploy` command of create-grist-widget,
+# a devDependency (node builtins only), so deploy fixes arrive as dependency
+# updates.
 #
 # Two jobs, so no dependency code ever runs next to a write token. `build`
 # installs and builds (Vite and its plugins are third-party code) with a
 # read-only token, and hands dist/ over as an artifact. `publish` holds
-# `contents: write` but installs nothing: it only runs scripts/deploy.mjs.
+# `contents: write`: it installs with --ignore-scripts, so no dependency code
+# runs, and then runs grist-widget-deploy alone, at the version the lockfile
+# pins.
 #
 # One-time setup this workflow can't do for you: enable Pages (Settings ->
 # Pages -> Source: Deploy from a branch -> gh-pages -> / (root); this workflow
@@ -53,7 +57,7 @@ on:
 # Nothing at workflow level: each job states what it needs.
 permissions: {}
 
-# Serialize deploys onto the single shared gh-pages branch. deploy.mjs
+# Serialize deploys onto the single shared gh-pages branch. grist-widget-deploy
 # additionally rebases-and-retries on push, so interleaving runs never clobber.
 concurrency:
   group: pages-gh-pages
@@ -130,7 +134,7 @@ jobs:
           REF: ${{ github.ref }}
           FORCE: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
         run: |
-          PLAN=$(node scripts/deploy.mjs plan \
+          PLAN=$(node_modules/.bin/grist-widget-deploy plan \
             --site site --repo "$REPO_NAME" \
             --event "$EVENT_NAME" \
             --ref "$REF" \
@@ -179,15 +183,25 @@ jobs:
       REF: ${{ github.ref }}
     steps:
       # Credentials stay persisted here: the first-release reset below pushes
-      # with them. Nothing in this job installs or runs dependency code.
+      # with them. No dependency code runs in this job (see the install step).
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           package-manager-cache: false
+
+      # Only for grist-widget-deploy, at the version (and integrity hash) the
+      # lockfile pins. --ignore-scripts: no dependency's install script runs,
+      # and the steps below call the bin directly, never through `pnpm
+      # exec`/`pnpm run`, whose dependency check may reinstall with scripts.
+      - name: Install the deploy command
+        run: pnpm install --ignore-scripts
 
       - name: Clone gh-pages into ./site
         env:
@@ -219,7 +233,7 @@ jobs:
           SHA="$(git rev-parse --short HEAD)"
           VERSION_ARG=""
           [ -n "$VERSION" ] && VERSION_ARG="--version $VERSION"
-          node scripts/deploy.mjs place \
+          node_modules/.bin/grist-widget-deploy place \
             --site site --repo "$REPO_NAME" \
             --channel "$CONTEXT" $VERSION_ARG \
             --dist dist \
@@ -237,13 +251,13 @@ jobs:
           if [ "$CONTEXT" = "release" ]; then
             UPDATE_VERSIONS="--update-versions"
           fi
-          node scripts/deploy.mjs finalize \
+          node_modules/.bin/grist-widget-deploy finalize \
             --site site --repo "$REPO_NAME" $UPDATE_VERSIONS --push \
             --commit-message "deploy: ${CONTEXT} @ ${SHA_FULL}"
 
       - name: Reset repo to a clean first-release state
         if: needs.build.outputs.context == 'release' && needs.build.outputs.firstRelease == 'true'
-        run: node scripts/deploy.mjs reset-branches --repo "$REPO_NAME"
+        run: node_modules/.bin/grist-widget-deploy reset-branches --repo "$REPO_NAME"
 
   cleanup:
     # When the `dev` branch is deleted, remove /dev/ so the dev URL retires
@@ -253,14 +267,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout (default branch — for scripts/deploy.mjs)
+      - name: Checkout (default branch — for its pinned grist-widget-deploy)
         uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           package-manager-cache: false
+
+      # As in `publish`: no dependency scripts run, and the bin is called directly.
+      - name: Install the deploy command
+        run: pnpm install --ignore-scripts
 
       - name: Clone gh-pages into ./site (skip if it does not exist)
         id: clone
@@ -283,7 +304,7 @@ jobs:
         env:
           DELETED_REF: ${{ github.event.ref }}
         run: |
-          node scripts/deploy.mjs remove --site site
-          node scripts/deploy.mjs finalize \
+          node_modules/.bin/grist-widget-deploy remove --site site
+          node_modules/.bin/grist-widget-deploy finalize \
             --site site --push \
             --commit-message "cleanup: retire dev URL for ${DELETED_REF}"
