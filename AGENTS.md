@@ -35,14 +35,15 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
 - **The template's:** `src/main.tsx`, `src/components/theme-provider.tsx`,
   `src/lib/utils.ts`, `src/vite-env.d.ts`, the workflows and Dependabot config,
   `vite.config.ts`, `tsconfig.json`, `eslint.config.js`, the Prettier config,
-  `components.json`, `CLAUDE.md` and this file.
+  `CLAUDE.md` and this file.
   Leave them as they are: `pnpm exec create-grist-widget upgrade` rewrites them to the
   template of the `create-grist-widget` version the widget depends on
   (<https://gristwidgets.com/docs/cli/upgrading>), and a local edit would be lost.
 - **The widget's:** everything else. `src/app/` holds its code and tests, the smoke test
   included: put every new component, hook, helper and asset there. `src/components/ui/`
   holds the shadcn primitives, where `shadcn add` writes (next to any other registry
-  folder it installs), and `src/index.css` the theme. `tsconfig.app.json` and
+  folder it installs), `src/index.css` the theme, and `components.json` shadcn's
+  configuration, registries included. `tsconfig.app.json` and
   `tsconfig.node.json` keep the widget's own paths and types (their compiler settings come
   from `grist-widget-sdk`). `README.md`, `index.html`, `public/` and
   `pnpm-workspace.yaml` are the widget's too, and so is `package.json`, apart from the
@@ -66,6 +67,10 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
    opening the `dev` → `main` PR: merging without a version bump publishes nothing (the
    release build silently no-ops whenever that version's directory already exists — the PR
    merges cleanly and CI reports success either way).
+5. **Template updates arrive with `create-grist-widget`.** Dependabot opens a pull request of
+   its own for it. Once that is merged into `dev`, run `pnpm exec create-grist-widget upgrade`
+   on `dev` in a follow-up pull request, then `pnpm install`, `pnpm typecheck`, `pnpm lint` and
+   `pnpm test`. It rewrites only the template's files (listed above) and says what it changed.
 
 ## Commands
 
@@ -108,6 +113,11 @@ creates a `gh-pages` branch — these settings can't be applied before that exis
 2. If that first workflow run fails with a permissions error pushing to `gh-pages`:
    Settings → Actions → General → Workflow permissions → **Read and write permissions**.
    Most repos don't need this; it depends on account/org defaults.
+3. After the first release (which commits to `main` and resets `dev`), a branch ruleset:
+   `main` requires a pull request and the `check` status, and blocks force pushes and
+   deletion; `dev` blocks force pushes and deletion. An agent acts through the owner's
+   account, so these rules don't tell it apart: they keep red changes off `main` whoever
+   merges. Ask the owner to set them; they need admin access.
 
 Full detail, including the two live URLs (`/latest/` and `/v<version>/`): `README.md`.
 
