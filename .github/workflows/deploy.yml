@@ -158,6 +158,9 @@ jobs:
         run: |
           pnpm exec tsc -b
           pnpm exec vite build --base "$BASE"
+          # grist-widget.json, the widget's Grist manifest (name, access,
+          # columns, versions), served next to index.html on every channel.
+          pnpm exec create-grist-widget manifest --base "$BASE"
 
       - name: Hand the build over to the publish job
         if: steps.plan.outputs.skip != 'true'

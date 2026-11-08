@@ -58,7 +58,9 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
    Grist document. This is deliberate, not a gap: an emulator can't guarantee parity with
    real Grist, so a fake local preview would teach the wrong lesson. Trust `pnpm test`
    (headless, real assertions) for local feedback, and the `dev`-branch loop below for real
-   behavior — don't build or suggest a seeded `pnpm dev` preview.
+   behavior — don't build or suggest a seeded `pnpm dev` preview. `pnpm demo` is not one:
+   it runs the widget in a real Grist (Docker, pinned image) with a generated document,
+   for a local look or a demo; it is optional, and nothing else needs Docker.
 3. **Widget changes get a test.** `src/app/App.test.tsx` uses `renderWithGrist` + `presets` from
    `grist-widget-sdk/emulator/testing` — no browser or real Grist doc needed. Run `pnpm test`.
 4. **Always develop on `dev`, release by merging to `main`.** Commit and push to `dev` for
@@ -78,6 +80,7 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
 | --- | --- |
 | Install | `pnpm install` |
 | Dev server (bare shell outside Grist, pointing at the `dev` loop) | `pnpm dev` |
+| The widget in a real local Grist (Docker; prints the URL, Ctrl-C stops it) | `pnpm demo` |
 | Build | `pnpm build` |
 | Test | `pnpm test` |
 | Lint | `pnpm lint` |
