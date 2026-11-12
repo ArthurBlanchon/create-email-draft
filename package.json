@@ -1,7 +1,7 @@
 {
   "name": "create-email-draft",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "grist": {
     "name": "Create Email Draft",
     "widgetId": "@arthurblanchon/create-email-draft",
