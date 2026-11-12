@@ -1,7 +1,7 @@
 {
   "name": "Create Email Draft",
   "widgetId": "@arthurblanchon/create-email-draft",
-  "url": "https://arthurblanchon.github.io/create-email-draft/v0.1.0/",
+  "url": "https://arthurblanchon.github.io/create-email-draft/v0.2.0/",
   "published": true,
   "accessLevel": "full",
   "columns": [
@@ -56,14 +56,15 @@
       "url": "https://github.com/ArthurBlanchon"
     }
   ],
-  "lastUpdatedAt": "2026-11-08T18:28:23.544Z",
+  "lastUpdatedAt": "2026-11-12T16:41:00.184Z",
   "gristWidgetSdk": {
     "schema": 1,
     "channel": "release",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "repository": "https://github.com/ArthurBlanchon/create-email-draft",
     "license": "MIT",
-    "sdk": "0.3.27",
-    "createGristWidget": "0.3.32"
+    "sdk": "0.4.0",
+    "createGristWidget": "0.4.0",
+    "demo": "https://arthurblanchon.github.io/create-email-draft/v0.2.0/demo/"
   }
 }
