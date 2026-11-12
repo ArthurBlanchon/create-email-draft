@@ -1,109 +1,77 @@
 # create-email-draft
 
-A Grist custom widget built with `grist-widget-sdk`: compose an email draft
-from the linked Grist row and hand it off to the user's mail client. It reads
-recipients / reply-to / subject / body from mapped columns, lets you pick a
-diffusion list and drop individual recipients, and opens a prefilled
-`mailto:` draft (tracking send status/date back on the row).
+A Grist custom widget: compose an email from the selected row and open it as
+a draft in your mail client (`mailto:`). It fills To, Bcc, the subject and
+the body from mapped columns, lets you drop or add recipients, insert a
+diffusion list (type `/`), and records the status and its date on the row.
+Diffusion lists come from a table you pick in the widget's settings
+(Grist's "Open configuration").
 
 <!-- install-url:start -->
 **Install URL**, to paste into a Grist custom widget's URL field: <https://arthurblanchon.github.io/create-email-draft/latest/>
 <!-- install-url:end -->
 
-`src/App.tsx` reads the selected row via `useGristContext<DraftMappedRecord>()`,
-renders the compose UI, and — when opened via the widget's config action —
-shows a `DiffusionConfigPanel` for editing the diffusion list stored in the
-widget options. It declares and exports `GRIST_OPTIONS` (`full` access, plus
-the mapped columns: recipients / replyToEmail / subject / content /
-removedRecipients / status / statusDate) and `WIDGET_METADATA`.
+**Try it:** <https://arthurblanchon.github.io/create-email-draft/latest/demo/>, Grist running in your browser with sample data (nothing is saved).
 
-`src/main.tsx` wraps the app with `GristWidgetProvider`, `GristBoundary`, and
-`GristSdkAlerts`. Opened outside a Grist iframe, `main.tsx` renders the
-showcase hub (`TemplateLanding`) at a bare path, or a `ChannelNotice` on
-`/latest/`, `/dev/`, `/v<version>/` (`src/lib/showcase-routing.ts`); when
-embedded, `GristStatusChip` shows live handshake status. `GristSdkAlerts`
-maps `getGristSdkAlertDescriptors()` from the SDK to shadcn `Alert`.
+## In Grist
 
-- **ESLint** blocks direct `grist` global usage in `src/` — use the SDK only.
-- Mapping alerts use `GristSdkAlerts`; the mapped columns are declared in
-  `GRIST_OPTIONS` (in `src/App.tsx`).
+Add a custom widget, paste the install URL, and set its access level to
+**Full document access** (to write the status and read the diffusion lists).
 
-To add widget tests later, see [Testing](https://github.com/ArthurBlanchon/grist-widget-sdk/blob/main/apps/docs/guide/testing.md) (`renderWithGrist` from `grist-widget-sdk/emulator/testing`).
+Then map its columns:
 
-## Deployment
+| Column | Type | What it is |
+| --- | --- | --- |
+| `recipients` | Text | Bcc addresses, separated by `,` or `;` |
+| `replyToEmail` | Text | To |
+| `subject` | Text | the subject |
+| `content` | Text, optional | the body |
+| `removedRecipients` | Text, optional | addresses dropped from this mailing |
+| `status` | Text, optional | written back: the draft's status |
+| `statusDate` | DateTime, optional | written back: when |
 
-A bundled GitHub Actions workflow (`.github/workflows/deploy.yml` +
-`scripts/deploy.mjs`) publishes this widget to **your own** GitHub Pages.
+## Code
 
-### The workflow: always develop on `dev`, release by merging to `main`
+The widget's own code is in `src/`:
 
-1. Commit and push to the `dev` branch (created for you at scaffold time).
-   Every push auto-deploys a live preview at `/dev/` that self-reloads
-   inside an open Grist document a few seconds later — paste that URL into
-   a Grist doc once, then just keep pushing while you iterate.
-2. Ready to publish a release? **Bump `package.json`'s `version`** as part
-   of your `dev` branch changes, then open a PR from `dev` into `main`.
-3. **Merge the PR.** This is the step that actually publishes — merging to
-   `main` builds immutable `/v<version>/` and updates mutable `/latest/`.
+- `src/app/App.tsx` is the whole widget: `GRIST_OPTIONS`, the compose form,
+  and the settings panel for the diffusion lists, stored in the widget's
+  options.
 
-> ⚠️ **Merging without bumping the version publishes nothing.** The release
-> build is idempotent — it skips whenever `package.json`'s version already
-> has a matching `v<version>/` directory published, which is always true if
-> you forgot to bump it (it'll match whatever's already live). The PR merges
-> cleanly and CI runs "successfully," but `/latest/` silently stays exactly
-> as it was. Bump the version *before* merging, not after.
+## Develop
 
-After merging, keep committing to the same `dev` branch for your next round
-of changes — it's the permanent working/preview branch for this widget, not
-a one-off feature branch to delete and recreate. Deleting it retires `/dev/`
-automatically.
+Develop on the `dev` branch; every push deploys `/dev/`
+(<https://arthurblanchon.github.io/create-email-draft/dev/>), which reloads itself in an
+open Grist document a few seconds later.
 
-> ⚠️ **Used GitHub's "Use this template" button instead of `npm create
-> grist-widget`?** That path copies this repo's default branch verbatim —
-> it doesn't run any of the CLI's own setup (renaming `package.json`,
-> titles, etc.), and whatever version happens to be checked into the
-> source repo's `package.json` (which can be well past `0.0.1` — see below)
-> comes along with it. You don't need to reset it by hand: your first real
-> release always resolves to `v0.0.1` regardless of what `package.json`
-> says, and that value stays untouched in the file — only the deploy
-> pipeline's own idea of "which version is this" is overridden, once, for
-> that first release. If you also checked **"Include all branches"** (to
-> get `gh-pages`/Pages already set up, no manual Settings step), your first
-> real release also automatically clears out every leftover `v<version>/`
-> it finds — a `v<version>/` only counts as a genuine prior release once it
-> carries a `showcase-meta.json` naming *this* repo (written by this
-> pipeline's own `place` step), so on a repo with no genuine releases yet,
-> everything else is provably inherited noise and gets safely wiped on your
-> first push to `main`. Also on that same first release, every branch
-> except `main`, `dev`, and `gh-pages` gets pruned, and `dev` gets
-> force-reset to match `main`'s tip — a fresh widget always starts from
-> `main == dev`, regardless of whether it came from the CLI (already true)
-> or a template copy (may have inherited a stray branch, or a `dev` full of
-> the source template's own unrelated preview history). All three of these
-> only ever apply before your *first* genuine release — once one exists,
-> they're permanently a no-op, so it's still safest to never manually
-> re-seed `gh-pages` again after that point.
+| | |
+| --- | --- |
+| Install | `pnpm install` |
+| Test (emulated Grist, no browser) | `pnpm test` |
+| Lint, type-check, build | `pnpm lint`, `pnpm typecheck`, `pnpm build` |
+| The widget in a real local Grist (Docker) | `pnpm demo` |
+| Regenerate the demo page | `pnpm demo --save` |
 
-**One-time setup** (the workflow can't do this part for you):
+`src/main.tsx` is one `mountGristWidget()` call from `grist-widget-sdk/app`:
+inside Grist it renders the widget behind the SDK's connection and
+column-mapping screens, with its alerts, in Grist's light or dark theme.
+Opened anywhere else, it shows which build this is and the URL to paste into
+Grist. The widget's code reads Grist only through `grist-widget-sdk`
+([docs](https://gristwidgets.com/docs)), never the `grist` global.
 
-1. **Settings → Pages** → Source: "Deploy from a branch" → branch `gh-pages`
-   → `/ (root)`. The workflow creates the `gh-pages` branch itself the first
-   time it runs (if it doesn't exist yet), but Pages needs to be pointed at
-   it once.
-   > ⚠️ **Not `main`.** If Pages is left on (or accidentally set to) `main`,
-   > it serves this repo's raw, unbuilt source — including a script tag
-   > pointing at `/src/main.tsx` — instead of the built site. The symptom is
-   > a blank/black page with a 404 for `/src/main.tsx` in the browser
-   > console, even though the workflow itself reports success (it pushed the
-   > right build to `gh-pages`; Pages is just reading from the wrong place).
-2. **Settings → Actions → General → Workflow permissions** → "Read and write
-   permissions". New repos sometimes default the workflow's token to
-   read-only, which would fail the push to `gh-pages` with a 403.
-3. If the repo is private, set **Pages visibility to Public** — a widget
-   embeds inside a Grist iframe, which needs a publicly reachable URL.
+`src/main.tsx`, the workflows and the build config are the template's: they
+come from `create-grist-widget`, and `pnpm exec create-grist-widget upgrade`
+(run on `dev` after Dependabot updates it) rewrites them
+([Upgrading a widget](https://gristwidgets.com/docs/cli/upgrading)).
+`AGENTS.md` says which files are which.
 
-No manifest/widget-catalog file is generated — that's a multi-widget,
-Grist-widget-repository concept this single-widget template doesn't need.
-Paste your `/latest/` or `/v<version>/` URL directly into Grist's custom
-widget URL field.
+## Release
 
+1. On `dev`, bump `package.json`'s `version`.
+2. Open a pull request from `dev` into `main`, and merge it once its checks
+   are green.
+
+Merging builds `/v<version>/` and updates `/latest/` and their demo pages.
+Without a version bump, nothing is published. The deploy workflow and its
+one-time repository settings are described in the
+[template's README](https://github.com/ArthurBlanchon/grist-widget-template#deployment).
