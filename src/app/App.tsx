@@ -178,7 +178,7 @@ export const WIDGET_METADATA = {
   description: "Compose an email draft from Grist row data and recipients.",
 } as const
 
-export function App() {
+function App() {
   useWidgetMetadata(WIDGET_METADATA)
 
   const w = useGristContext<DraftMappedRecord>()

@@ -11,24 +11,34 @@
 
 ## The widget contract
 
-The widget lives in `src/app/`. Its entry point, `src/app/App.tsx`, has three exports:
+The widget lives in `src/app/`. Its entry point, `src/app/App.tsx`, exports its declaration
+and the widget:
 
 ```tsx
-export const GRIST_OPTIONS: UseGristOptions = { requiredAccess: "read table" }
-export const WIDGET_METADATA = { title: "...", description: "..." } as const
+export const widget = defineGristWidget({
+  title: "...",
+  description: "...",
+  requiredAccess: "read table",
+  columns: [{ name: "Title", type: "Text" }],
+})
+
 export default function App() {
-  const w = useGrist()
-  // ...
+  const w = widget.useGrist() // typed from the declaration: no generics
+  // w.mappedRecord, w.updateRecord({ Title: "..." }), ...
 }
 ```
 
-`GRIST_OPTIONS` may live in a file of its own, as long as `App.tsx` re-exports it: the
-template's `src/main.tsx` imports both from `./app/App`.
+The declaration may live in a file of its own (`src/app/widget.ts`), as long as `App.tsx`
+re-exports it. A widget made before `defineGristWidget` exports `GRIST_OPTIONS` and
+`WIDGET_METADATA` instead; both forms work.
 
-`src/main.tsx` is one call, `mountGristWidget({ App, options: GRIST_OPTIONS, dev })` from
-`grist-widget-sdk/app`: inside Grist it renders `<App />` in `GristWidgetProvider` and
-`GristBoundary`, with the SDK's alerts and Grist's light/dark theme. Access level, column
-mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit.
+`src/main.tsx` is one call, `mountGristWidget(entry, { dev })` from `grist-widget-sdk/app`,
+with `entry` the module `src/app/App.tsx`: inside Grist it renders the widget in
+`GristWidgetProvider` and `GristBoundary`, with the SDK's alerts and Grist's light/dark
+theme. To replace the alerts or the pages shown outside Grist, export `Alerts`,
+`LocalDevPage` or `ReleasePage` from `src/app/App.tsx`; a provider goes inside `App`. Never
+edit `src/main.tsx`: `upgrade` refuses to run over a changed one. Access level, column
+mapping, and rendering all live in `src/app/App.tsx`: that's the file to edit.
 
 ### What is the template's, what is the widget's
 
@@ -53,18 +63,23 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
 
 1. **Widgets use the SDK.** No direct `window.grist.*` calls — use `useGrist()` and the
    other `grist-widget-sdk` hooks.
-2. **`pnpm dev` is a bare shell, on purpose — not a seeded preview.** Opened outside Grist
-   it shows the SDK's local-dev page; the widget itself only renders once actually embedded in a
-   Grist document. This is deliberate, not a gap: an emulator can't guarantee parity with
-   real Grist, so a fake local preview would teach the wrong lesson. Trust `pnpm test`
-   (headless, real assertions) for local feedback, and the `dev`-branch loop below for real
-   behavior — don't build or suggest a seeded `pnpm dev` preview. `pnpm demo` is not one:
-   it runs the widget in a real Grist (Docker, pinned image) with a generated document,
-   for a local look or a demo; it is optional, and nothing else needs Docker. Nor is the
-   demo page (`pnpm demo --save`, `public/demo/`): it is Grist itself, running in the
-   browser from static files, with a document the owner commits and may edit.
-3. **Widget changes get a test.** `src/app/App.test.tsx` uses `renderWithGrist` + `presets` from
-   `grist-widget-sdk/emulator/testing` — no browser or real Grist doc needed. Run `pnpm test`.
+2. **The widget only renders inside real Grist, never in a seeded preview.** Opened
+   outside Grist, `pnpm dev` shows the SDK's local-dev page: an emulator can't guarantee
+   parity with real Grist, so a fake preview would teach the wrong lesson. Real Grist comes
+   three ways, none of them a preview:
+   - **`pnpm dev`, then `http://localhost:5173/demo/index.html`:** the demo page,
+     `public/demo/` (Grist itself, running in the browser from static files), on the dev
+     server's widget, so edits reload in place. No Docker. After changing the declared
+     columns, regenerate its document with `pnpm demo --save`.
+   - **`pnpm demo`:** a real Grist in Docker (pinned image) with a generated document.
+   - **The `dev` branch's `/dev/`** in a Grist document of the owner's: the check that counts.
+
+   Trust `pnpm test` (headless, real assertions) for fast local feedback. Don't build or
+   suggest a seeded `pnpm dev` preview.
+3. **Widget changes get a test.** `src/app/App.test.tsx` uses
+   `renderWithGrist(<App />, { widget, rows })` from `grist-widget-sdk/emulator/testing`: the
+   widget against its declared columns, mapped, with typed rows; no browser or real Grist doc
+   needed. Run `pnpm test`.
 4. **Always develop on `dev`, release by merging to `main`.** Commit and push to `dev` for
    every change — it auto-deploys a live preview at `.../dev/` that self-reloads inside an
    open Grist document a few seconds later. Bump `package.json`'s `version` *before*
@@ -81,7 +96,7 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
 | Intent | Command |
 | --- | --- |
 | Install | `pnpm install` |
-| Dev server (bare shell outside Grist, pointing at the `dev` loop) | `pnpm dev` |
+| Dev server; `/demo/index.html` opens the widget in real Grist in the browser, edits reloading in place | `pnpm dev` |
 | The widget in a real local Grist (Docker; prints the URL, Ctrl-C stops it) | `pnpm demo` |
 | The widget's demo page in `public/demo/` (Docker to generate; served at `<channel>/demo/`) | `pnpm demo --save` |
 | Build | `pnpm build` |
@@ -97,10 +112,10 @@ mapping, and rendering all live in `src/app/App.tsx` — that's the file to edit
 | Concept | Path |
 | --- | --- |
 | The widget (everything in it is the widget's own) | `src/app/` |
-| Its entry point (GRIST_OPTIONS, WIDGET_METADATA, App) | `src/app/App.tsx` |
+| Its entry point (the `export const widget` declaration, the default export App) | `src/app/App.tsx` |
 | Widget test (the pattern to copy for new tests) | `src/app/App.test.tsx` |
 | Smoke test (one smokeTestWidget call; CI runs it on SDK updates) | `src/app/App.smoke.test.tsx` |
-| Grist wiring (mountGristWidget, inside vs. outside Grist) | `src/main.tsx` |
+| Grist wiring (mountGristWidget(entry), inside vs. outside Grist; never edited) | `src/main.tsx` |
 | ui primitives | `src/components/ui/` |
 | Deploy workflow (runs grist-widget-deploy from the create-grist-widget devDependency: version guard, channel logic) | `.github/workflows/deploy.yml` |
 | Pull request checks (lint, test, build) | `.github/workflows/ci.yml` |

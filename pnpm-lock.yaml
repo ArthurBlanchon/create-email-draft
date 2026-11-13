@@ -21,8 +21,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       grist-widget-sdk:
-        specifier: ^0.4.0
-        version: 0.4.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: ^0.5.0
+        version: 0.5.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       lucide-react:
         specifier: ^1.66.0
         version: 1.66.0(@types/react@19.3.0)(react@19.3.1)
@@ -73,8 +73,8 @@ importers:
         specifier: ^6.2.1
         version: 6.3.0(vite@8.3.5(@types/node@26.6.6)(jiti@2.7.0))
       create-grist-widget:
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.5.0
+        version: 0.5.0
       eslint:
         specifier: ^10.13.0
         version: 10.14.0(jiti@2.7.0)
@@ -1641,8 +1641,8 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
-  create-grist-widget@0.4.0:
-    resolution: {integrity: sha512-q6wLS/48nm2uLDbmwQs569jkhEVCsxHVABjx686NJU1Js/5skZlg18KO9GejhCpqnljwFnsG8il7mj9Q88aeOg==}
+  create-grist-widget@0.5.0:
+    resolution: {integrity: sha512-2poWU2qwsyRgOqPx27f8reZiiQ3s+IzXSLP1Kab4hdlb187/Dq5iF8BbqnMML+LZkiPGxSvJ5YYcTQ18fVEh2A==}
     engines: {node: ^22.22.0 || >=24.15.0}
     hasBin: true
 
@@ -1971,8 +1971,8 @@ packages:
   grain-rpc@0.1.7:
     resolution: {integrity: sha512-ExN19s6e/VfiQQupb52uI9yIz2FWgL702yelYn3N4sS5/+jkDjC4MhLNJpfp8LxAdBIknJ3kTztzVz+PdRpBVg==}
 
-  grist-widget-sdk@0.4.0:
-    resolution: {integrity: sha512-0h4H4dImYnGaCIE6eDRdOgkT83qgM5wnqQxLs68kWmF2fDMl4je8It6pwIY6SCAHIjaYydItR5gxaOWHOspMEQ==}
+  grist-widget-sdk@0.5.0:
+    resolution: {integrity: sha512-+Re7mxQmTZjntlt+el/j368PWPpHFiZXuYDG+X6KLgs2SnazMUvkwp4Prw1IMhXBRRK6yLSC0CWBX0qEIXu3xA==}
     engines: {node: '>=18'}
     peerDependencies:
       react: '>=18'
@@ -4690,7 +4690,7 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  create-grist-widget@0.4.0:
+  create-grist-widget@0.5.0:
     dependencies:
       '@clack/prompts': 1.8.1
 
@@ -5011,7 +5011,7 @@ snapshots:
       events: 1.1.1
       ts-interface-checker: 1.0.2
 
-  grist-widget-sdk@0.4.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  grist-widget-sdk@0.5.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       grain-rpc: 0.1.7
       react: 19.3.1
