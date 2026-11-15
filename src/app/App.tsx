@@ -396,7 +396,7 @@ function CreateDraftEmailForm({
   w: UseGristResult<DraftMappedRecord>
   diffusionConfig: DiffusionConfig | null
 }) {
-  const { isAvailable, record, mappedRecord, mappings, table } = w
+  const { status: gristStatus, record, mappedRecord, mappings, table } = w
 
   const seed = buildSeed(record, mappedRecord)
   const [recipientsText, setRecipientsText] = useState(seed.recipientsText)
@@ -840,14 +840,14 @@ function CreateDraftEmailForm({
             <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
               <span
                 className={
-                  isAvailable === true
+                  gristStatus === "ready"
                     ? "size-2 animate-pulse rounded-full bg-green-500"
                     : "size-2 animate-pulse rounded-full bg-red-500"
                 }
               />
-              {isAvailable === null
+              {gristStatus === "booting"
                 ? "Grist: loading..."
-                : isAvailable
+                : gristStatus === "ready"
                   ? "Grist: ready"
                   : "Grist: unavailable"}
             </span>
