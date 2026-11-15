@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import {
-  useGristContext,
+  useGrist,
   useWidgetMetadata,
   type UseGristOptions,
   type UseGristResult,
@@ -181,7 +181,7 @@ export const WIDGET_METADATA = {
 function App() {
   useWidgetMetadata(WIDGET_METADATA)
 
-  const w = useGristContext<DraftMappedRecord>()
+  const w = useGrist<DraftMappedRecord>()
   const [showConfig, setShowConfig] = useState(false)
 
   useEffect(() => {
@@ -396,7 +396,7 @@ function CreateDraftEmailForm({
   w: UseGristResult<DraftMappedRecord>
   diffusionConfig: DiffusionConfig | null
 }) {
-  const { isAvailable, record, mappedRecord, mappings, table } = w
+  const { status: gristStatus, record, mappedRecord, mappings, table } = w
 
   const seed = buildSeed(record, mappedRecord)
   const [recipientsText, setRecipientsText] = useState(seed.recipientsText)
@@ -454,7 +454,7 @@ function CreateDraftEmailForm({
     : ""
   // The configured diffusion lists once fetched: none until a diffusion table
   // is configured and Grist is ready, or while its fetch is in flight.
-  const diffusionKey = w.isReady ? diffusionConfigKey : ""
+  const diffusionKey = w.status === "ready" ? diffusionConfigKey : ""
   const diffusionEntries =
     diffusionKey && fetchedDiffusion?.key === diffusionKey
       ? fetchedDiffusion.entries
@@ -469,7 +469,7 @@ function CreateDraftEmailForm({
     // A response for a configuration that has since changed is dropped.
     let current = true
     void formWRef.current
-      .fetchTableRows(diffusionTableId)
+      .fetchRows(diffusionTableId)
       .then((rows) => {
         const entries: DiffusionEntry[] = rows
           .map((row) => ({
@@ -840,14 +840,14 @@ function CreateDraftEmailForm({
             <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
               <span
                 className={
-                  isAvailable === true
+                  gristStatus === "ready"
                     ? "size-2 animate-pulse rounded-full bg-green-500"
                     : "size-2 animate-pulse rounded-full bg-red-500"
                 }
               />
-              {isAvailable === null
+              {gristStatus === "booting"
                 ? "Grist: loading..."
-                : isAvailable
+                : gristStatus === "ready"
                   ? "Grist: ready"
                   : "Grist: unavailable"}
             </span>
