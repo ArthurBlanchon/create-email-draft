@@ -56,15 +56,15 @@
       "url": "https://github.com/ArthurBlanchon"
     }
   ],
-  "lastUpdatedAt": "2026-11-15T07:18:07.673Z",
+  "lastUpdatedAt": "2026-11-27T22:00:31.400Z",
   "gristWidgetSdk": {
     "schema": 1,
     "channel": "dev",
     "version": "0.2.0",
     "repository": "https://github.com/ArthurBlanchon/create-email-draft",
     "license": "MIT",
-    "sdk": "0.6.2",
-    "createGristWidget": "0.6.2",
+    "sdk": "0.8.0",
+    "createGristWidget": "0.8.0",
     "demo": "https://arthurblanchon.github.io/create-email-draft/dev/demo/"
   }
 }
